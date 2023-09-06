@@ -22,7 +22,6 @@ export default function ImageGallery({
   const [loading, setLoading] = useState(false);
   const [localPage, setLocalPage] = useState(START_PAGE);
   const [totalPictures, setTotalPictures] = useState(0);
-
   const [targetImg, setTargetImg] = useState('');
   const [showImg, setShowImg] = useState(false);
 
