@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { Component } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
 import ImageGalleryItem from 'components/ImageGalleryItem';
@@ -10,123 +10,100 @@ import Modal from 'components/Modal';
 import { Container, GalleryImage } from './ImageGallery.styled';
 
 const BASE_URL = 'https://pixabay.com/api/';
+const START_PAGE = 1;
+const START_RESPONSE = [];
 
-export default class ImageGallery extends Component {
-  state = {
-    response: null,
-    loading: false,
-    localPage: 1,
-    targetImg: '',
-    totalPicturs: 0,
-    itemsCounter: 0,
-    isHide: true,
-    showImg: false,
-  };
+export default function ImageGallery({
+  searchValue,
+  onOpenModalClick,
+  showModal,
+}) {
+  const [response, setResponse] = useState(START_RESPONSE);
+  const [loading, setLoading] = useState(false);
+  const [localPage, setLocalPage] = useState(START_PAGE);
+  const [totalPictures, setTotalPictures] = useState(0);
 
-  async componentDidUpdate(prevProps, prevState) {
-    if (prevProps.searchValue !== this.props.searchValue) {
-      this.setState({
-        response: null,
-      });
+  const [targetImg, setTargetImg] = useState('');
+  const [showImg, setShowImg] = useState(false);
 
-      const response = await this.fetchImages(1);
-      let hide = false;
+  const fetchImages = useMemo(
+    () => async page => {
+      const params = {
+        key: '35900010-e6fba30fbbb71a29105fd08a0',
+        q: searchValue,
+        image_type: 'photo',
+        orientation: 'horizontal',
+        per_page: 12,
+        page: page,
+      };
 
-      if (response.data.totalHits - 12 < 12) {
-        hide = true;
+      try {
+        const response = await axios.get(BASE_URL, { params });
+        return response;
+      } catch (error) {
+        console.log(error);
       }
+    },
+    [searchValue]
+  );
 
-      this.setState({
-        response: response.data.hits,
-        totalPicturs: response.data.totalHits,
-        itemsCounter: 12,
-        isHide: hide,
-      });
+  const loadImages = useMemo(
+    () => async (page, images) => {
+      setLoading(true);
+      const newResponse = await fetchImages(page);
+      setLoading(false);
+
+      setResponse(images.concat(newResponse.data.hits));
+
+      setTotalPictures(newResponse.data.totalHits);
+
+      setLocalPage(page);
+    },
+    [fetchImages]
+  );
+
+  useEffect(() => {
+    if (searchValue === '') {
+      return;
     }
-  }
 
-  fetchImages = async localPage => {
-    this.setState({ loading: true });
+    loadImages(START_PAGE, START_RESPONSE, searchValue);
+  }, [searchValue, loadImages]);
 
-    const params = {
-      key: '35900010-e6fba30fbbb71a29105fd08a0',
-      q: this.props.searchValue,
-      image_type: 'photo',
-      orientation: 'horizontal',
-      per_page: 12,
-      page: localPage,
-    };
-
-    try {
-      const response = await axios.get(BASE_URL, { params });
-      return response;
-    } catch (error) {
-      console.log(error);
-    } finally {
-      this.setState(({ localPage, itemsCounter }) => ({
-        loading: false,
-        localPage: localPage + 1,
-        itemsCounter: itemsCounter + 12,
-      }));
-    }
+  const onImageClick = url => {
+    setTargetImg(url);
+    onOpenModalClick();
   };
 
-  onImageClick = url => {
-    this.setState({ targetImg: url });
-    this.props.onOpenModalClick();
-  };
+  return (
+    <Container>
+      {response &&
+        response.map(img => (
+          <ImageGalleryItem
+            key={img.id}
+            webformatURL={img.webformatURL}
+            onClick={() => onImageClick(img.largeImageURL)}
+          />
+        ))}
 
-  onLoadMoreClick = async () => {
-    const newResponse = await this.fetchImages(this.state.localPage);
+      <Button
+        onClick={() => loadImages(localPage + 1, response, searchValue)}
+        isHide={localPage * 12 > totalPictures}
+      />
 
-    this.setState(({ response }) => ({
-      response: response.concat(newResponse.data.hits),
-    }));
+      {showModal && (
+        <Modal
+          onClose={onOpenModalClick}
+          showImg={showImg}
+          resetImg={() => setShowImg(false)}
+        >
+          <GalleryImage src={targetImg} onLoad={() => setShowImg(true)} />
+        </Modal>
+      )}
 
-    if (this.state.totalPicturs - this.state.itemsCounter < 12) {
-      this.setState({
-        isHide: true,
-      });
-    }
-  };
-
-  toggleImg = () => {
-    this.setState(({ showImg }) => ({
-      showImg: !showImg,
-    }));
-  };
-
-  render() {
-    const { loading, response, targetImg, isHide, showImg } = this.state;
-    const { onOpenModalClick, showModal } = this.props;
-
-    return (
-      <Container>
-        {response &&
-          response.map(img => (
-            <ImageGalleryItem
-              key={img.id}
-              webformatURL={img.webformatURL}
-              onClick={() => this.onImageClick(img.largeImageURL)}
-            />
-          ))}
-
-        <Button onClick={this.onLoadMoreClick} isHide={isHide} />
-
-        {showModal && (
-          <Modal
-            onClose={onOpenModalClick}
-            showImg={showImg}
-            resetImg={this.toggleImg}
-          >
-            <GalleryImage src={targetImg} onLoad={this.toggleImg} />
-          </Modal>
-        )}
-
-        {loading && <Loader />}
-      </Container>
-    );
-  }
+      {loading && <Loader />}
+    </Container>
+  );
 }
 
 ImageGallery.propTypes = {
